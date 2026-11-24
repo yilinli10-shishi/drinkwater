@@ -11,7 +11,8 @@
     <meta name="apple-mobile-web-app-title" content="喝水小手帳">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#FAF7F2">
-    <link id="apple-touch-icon" rel="apple-touch-icon" href="">
+    <link id="favicon-icon" rel="icon" type="image/png" href="">
+    <link id="apple-touch-icon" rel="apple-touch-icon" sizes="180x180" href="">
     <link id="app-manifest" rel="manifest" href="">
 
     <!-- 載入 Tailwind CSS -->
@@ -1218,13 +1219,15 @@
         }
 
         function toggleClaimReward(rewardId) {
-            const item = appState.rewards.find(r => r.id === rewardId);
-            if (!item) return;
-            item.claimed = !item.claimed;
+            const idx = appState.rewards.findIndex(r => r.id === rewardId);
+            if (idx === -1) return;
+            appState.rewards[idx].claimed = !appState.rewards[idx].claimed;
             saveState();
             renderRewards();
-            if (item.claimed) {
-                showToast(`🎉 恭喜兌換「${item.title}」！好好犒賞自己吧`);
+            if (appState.rewards[idx].claimed) {
+                showToast(`🎉 恭喜領取「${appState.rewards[idx].title}」！`);
+            } else {
+                showToast('已取消兌換標記');
             }
         }
 
@@ -1232,13 +1235,15 @@
             appState.rewards = appState.rewards.filter(r => r.id !== rewardId);
             saveState();
             renderRewards();
-            showToast('已移除該項獎勵');
+            showToast('已刪除該項獎勵');
         }
 
-        // 10. 同步與桌面引導視窗操作
+        // 10. 跨裝置同步與安裝引導 Modal 控制
         function openSyncModal() {
-            document.getElementById('current-sync-code-display').value = syncCode;
-            document.getElementById('input-sync-code').value = '';
+            const displayInput = document.getElementById('current-sync-code-display');
+            if (displayInput) displayInput.value = syncCode;
+            const inputEl = document.getElementById('input-sync-code');
+            if (inputEl) inputEl.value = '';
             document.getElementById('sync-modal').classList.remove('hidden');
         }
 
@@ -1249,15 +1254,17 @@
         function copyTextFallback(text, successMsg) {
             const temp = document.createElement('textarea');
             temp.value = text;
+            temp.style.position = 'fixed';
+            temp.style.opacity = '0';
             document.body.appendChild(temp);
             temp.select();
             try {
                 document.execCommand('copy');
                 showToast(successMsg);
             } catch (e) {
-                showToast('請手動長按複製欄位內容');
+                showToast('複製失敗，請手動選取複製');
             }
-            document.body.removeChild(temp);
+            temp.remove();
         }
 
         function copySyncCode() {
@@ -1267,22 +1274,34 @@
         function copyShareUrlWithSync() {
             const url = new URL(window.location.href);
             url.searchParams.set('sync', syncCode);
-            copyTextFallback(url.toString(), '已複製專屬同步網址！🔗');
+            copyTextFallback(url.toString(), '已複製含同步金鑰的專屬網址！🔗');
         }
 
         function applyNewSyncCode() {
-            const newCode = document.getElementById('input-sync-code').value.trim();
-            if (!newCode || newCode.length < 4) {
-                showToast('請輸入有效的同步金鑰（至少 4 個字元）');
+            const inputEl = document.getElementById('input-sync-code');
+            const newCode = (inputEl ? inputEl.value : '').trim();
+            if (newCode.length < 4) {
+                showToast('請輸入至少 4 碼的有效同步金鑰');
                 return;
             }
             syncCode = newCode;
-            try { localStorage.setItem(SYNC_CODE_KEY, syncCode); } catch (e) {}
-            appState.updatedAt = 0; // 允許立即接收該房間的最新雲端資料
+            try {
+                localStorage.setItem(SYNC_CODE_KEY, syncCode);
+            } catch (e) {}
+
+            // 更新網址列參數方便加入桌面時保留
+            try {
+                const url = new URL(window.location.href);
+                url.searchParams.set('sync', syncCode);
+                window.history.replaceState({}, '', url.toString());
+            } catch (e) {}
+
             updateSyncUI(false);
-            subscribeToSyncCode(syncCode);
+            if (db && currentUser) {
+                subscribeToSyncCode(syncCode);
+            }
             closeSyncModal();
-            showToast(`已切換同步金鑰為「${syncCode}」☁️`);
+            showToast(`已切換同步金鑰至：${syncCode} ☁️`);
         }
 
         function openInstallModal() {
@@ -1293,33 +1312,121 @@
             document.getElementById('install-modal').classList.add('hidden');
         }
 
-        // 11. 動態生成手機桌面 Web App 圖示與 Manifest
-        function setupMobileWebApp() {
-            const iconSvg = `
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
-                    <rect width="180" height="180" rx="40" fill="#FAF7F2"/>
-                    <path d="M90 32 C90 32 45 84 45 114 C45 139 65 156 90 156 C115 156 135 139 135 114 C135 84 90 32 90 32 Z" fill="#7EB9CA"/>
-                    <circle cx="77" cy="112" r="4.5" fill="#4A443F"/>
-                    <circle cx="103" cy="112" r="4.5" fill="#4A443F"/>
-                    <path d="M82 122 Q90 130 98 122" stroke="#4A443F" stroke-width="4" fill="none" stroke-linecap="round"/>
-                </svg>
-            `;
-            const iconDataUri = 'data:image/svg+xml;utf8,' + encodeURIComponent(iconSvg);
-            const touchIcon = document.getElementById('apple-touch-icon');
-            if (touchIcon) touchIcon.href = iconDataUri;
+        // 11. 動態生成高解析度 PNG 手機桌面 Web App 圖示（相容 iOS Safari 與 Android）
+        function renderCuteWaterDropPng(size) {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            const s = size / 180; // 以 180x180 為基準等比例縮放
 
+            // 1. 暖和紙米白背景（iOS 會自動裁切圓角，填滿整張避免黑邊）
+            ctx.fillStyle = '#FAF7F2';
+            ctx.fillRect(0, 0, size, size);
+
+            // 2. 柔和和紙內框圓環裝飾
+            ctx.beginPath();
+            ctx.arc(90 * s, 90 * s, 74 * s, 0, Math.PI * 2);
+            ctx.fillStyle = '#FFFDF9';
+            ctx.fill();
+            ctx.lineWidth = 3 * s;
+            ctx.strokeStyle = '#EAE2D6';
+            ctx.stroke();
+
+            // 3. 可愛胖嘟嘟水滴主體（帶治癒水藍漸層）
+            const dropGrad = ctx.createLinearGradient(0, 34 * s, 0, 152 * s);
+            dropGrad.addColorStop(0, '#9AD0DF');
+            dropGrad.addColorStop(1, '#6BAEC2');
+
+            ctx.beginPath();
+            ctx.moveTo(90 * s, 32 * s);
+            ctx.bezierCurveTo(90 * s, 32 * s, 44 * s, 82 * s, 44 * s, 112 * s);
+            ctx.bezierCurveTo(44 * s, 138 * s, 64 * s, 154 * s, 90 * s, 154 * s);
+            ctx.bezierCurveTo(116 * s, 154 * s, 136 * s, 138 * s, 136 * s, 112 * s);
+            ctx.bezierCurveTo(136 * s, 82 * s, 90 * s, 32 * s, 90 * s, 32 * s);
+            ctx.closePath();
+            ctx.fillStyle = dropGrad;
+            ctx.fill();
+
+            // 4. 水滴左上角高光反光
+            ctx.beginPath();
+            ctx.ellipse(67 * s, 93 * s, 5.5 * s, 12 * s, Math.PI / 6, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 253, 249, 0.72)';
+            ctx.fill();
+
+            // 5. 淡櫻粉可愛小腮紅
+            ctx.fillStyle = 'rgba(242, 168, 176, 0.75)';
+            ctx.beginPath();
+            ctx.ellipse(66 * s, 119 * s, 7 * s, 4.2 * s, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(114 * s, 119 * s, 7 * s, 4.2 * s, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 6. 圓潤微笑眼睛
+            ctx.fillStyle = '#3F3A36';
+            ctx.beginPath();
+            ctx.arc(76 * s, 111 * s, 4.5 * s, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(104 * s, 111 * s, 4.5 * s, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 眼睛小白點神采
+            ctx.fillStyle = '#FFFDF9';
+            ctx.beginPath();
+            ctx.arc(74.5 * s, 109.5 * s, 1.5 * s, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(102.5 * s, 109.5 * s, 1.5 * s, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 7. 治癒微笑嘴巴
+            ctx.beginPath();
+            ctx.moveTo(83 * s, 120 * s);
+            ctx.quadraticCurveTo(90 * s, 128 * s, 97 * s, 120 * s);
+            ctx.lineWidth = 3.6 * s;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#3F3A36';
+            ctx.stroke();
+
+            return canvas.toDataURL('image/png');
+        }
+
+        function setupMobileWebApp() {
+            const png180 = renderCuteWaterDropPng(180);
+            const png512 = renderCuteWaterDropPng(512);
+
+            // 設定 iPhone / iPad 主畫面圖示（必須為 PNG）
+            const touchIcon = document.getElementById('apple-touch-icon');
+            if (touchIcon) touchIcon.href = png180;
+
+            // 設定瀏覽器分頁小圖示
+            const faviconIcon = document.getElementById('favicon-icon');
+            if (faviconIcon) faviconIcon.href = png180;
+
+            // 設定 Android / Chrome PWA Manifest
             const manifestObj = {
                 name: 'みずの記録 | 每日喝水小手帳',
                 short_name: '喝水小手帳',
-                start_url: '.',
+                start_url: window.location.href,
                 display: 'standalone',
                 background_color: '#FAF7F2',
                 theme_color: '#FAF7F2',
-                icons: [{
-                    src: iconDataUri,
-                    sizes: '180x180',
-                    type: 'image/svg+xml'
-                }]
+                icons: [
+                    {
+                        src: png180,
+                        sizes: '180x180',
+                        type: 'image/png',
+                        purpose: 'any maskable'
+                    },
+                    {
+                        src: png512,
+                        sizes: '512x512',
+                        type: 'image/png',
+                        purpose: 'any maskable'
+                    }
+                ]
             };
             const manifestEl = document.getElementById('app-manifest');
             if (manifestEl) {
