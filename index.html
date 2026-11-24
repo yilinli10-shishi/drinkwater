@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>みずの記録 | 每日喝水小手帳</title>
+
+    <!-- 手機桌面 Web App (PWA) 支援設定 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="喝水小手帳">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#FAF7F2">
+    <link id="apple-touch-icon" rel="apple-touch-icon" href="">
+    <link id="app-manifest" rel="manifest" href="">
+
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- 載入日系圓潤手寫感字體：Zen Maru Gothic & Noto Sans TC -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Zen Maru Gothic"', '"Noto Sans TC"', 'sans-serif'],
+                    },
+                    colors: {
+                        washi: '#FAF7F2',       // 暖和紙米白底色
+                        cream: '#FFFDF9',       // 卡片奶油白
+                        ink: '#4A443F',         // 溫柔深焙棕文字
+                        muted: '#8E857C',       // 亞麻灰輔助字
+                        aqua: {
+                            light: '#E3F2F6',
+                            DEFAULT: '#7EB9CA', // 治癒水藍色
+                            dark: '#5797AA'
+                        },
+                        matcha: {
+                            light: '#E8EFE6',
+                            DEFAULT: '#8FA889', // 抹茶綠
+                            dark: '#6D8867'
+                        },
+                        sakura: {
+                            light: '#F9ECEC',
+                            DEFAULT: '#E2A9A9', // 淡櫻粉
+                        },
+                        sand: '#EAE2D6'         // 手帳邊框色
+                    },
+                    boxShadow: {
+                        'soft': '0 6px 20px -4px rgba(138, 126, 114, 0.08)',
+                        'card': '0 2px 10px rgba(138, 126, 114, 0.05)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* 手帳和紙微質感背景 */
+        body {
+            background-color: #FAF7F2;
+            background-image: radial-gradient(#E5DDD0 0.75px, transparent 0.75px);
+            background-size: 20px 20px;
+            color: #4A443F;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* 水杯點擊彈跳動畫 */
+        @keyframes popCup {
+            0% { transform: scale(1); }
+            45% { transform: scale(1.13) rotate(-3deg); }
+            75% { transform: scale(0.96) rotate(2deg); }
+            100% { transform: scale(1) rotate(0deg); }
+        }
+        .animate-pop {
+            animation: popCup 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* 拼圖解鎖消散動畫 */
+        @keyframes tileReveal {
+            0% { transform: scale(1.08); opacity: 0.9; }
+            100% { transform: scale(0.8); opacity: 0; }
+        }
+        .tile-unlocked {
+            animation: tileReveal 0.55s ease-out forwards;
+            pointer-events: none;
+        }
+
+        /* 自訂捲軸 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #FAF7F2;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #D8CFC2;
+            border-radius: 9999px;
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased selection:bg-aqua-light selection:text-ink pb-16">
+
+    <!-- 頂部浮動通知 Toast（取代 alert） -->
+    <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 pointer-events-none flex flex-col items-center gap-2 w-full max-w-sm px-4"></div>
+
+    <!-- 主容器 -->
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 pt-6 sm:pt-10 space-y-6">
+
+        <!-- 頁首手帳標題區 -->
+        <header class="bg-cream border border-sand rounded-3xl p-5 sm:p-7 shadow-soft relative overflow-hidden">
+            <!-- 右上角和紙膠帶裝飾 -->
+            <div class="hidden sm:block absolute -top-2 right-12 w-24 h-6 bg-matcha-light/80 border border-matcha/30 rotate-3 rounded-sm"></div>
+
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-aqua-light text-aqua-dark text-xs font-bold tracking-wider mb-2">
+                        <span>💧 みずの記録</span>
+                        <span>•</span>
+                        <span id="current-date-label">載入日期中...</span>
+                    </div>
+                    <h1 class="text-2xl sm:text-3xl font-bold text-ink tracking-tight flex items-center gap-2">
+                        每日喝水小手帳
+                    </h1>
+                    <p class="text-sm text-muted mt-1">每天 10 杯 × 250cc，溫柔灌溉身心每一天</p>
+                </div>
+
+                <!-- 功能快捷按鈕群 -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <button onclick="openSyncModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-washi hover:bg-aqua-light/70 border border-sand text-xs sm:text-sm font-medium text-ink transition active:scale-95">
+                        <span id="sync-status-dot" class="w-2 h-2 rounded-full bg-matcha"></span>
+                        <span id="sync-btn-label">☁️ 跨裝置同步</span>
+                    </button>
+                    <button onclick="openInstallModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-washi hover:bg-matcha-light/70 border border-sand text-xs sm:text-sm font-medium text-ink transition active:scale-95">
+                        <span>📲 放到手機桌面</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 今日進度條總覽 -->
+            <div class="mt-6 pt-5 border-t border-dashed border-sand">
+                <div class="flex items-end justify-between mb-2">
+                    <div>
+                        <span class="text-xs text-muted block">今日累積飲水量</span>
+                        <div class="flex items-baseline gap-1.5">
+                            <span id="today-cc" class="text-2xl sm:text-3xl font-bold text-aqua-dark">0</span>
+                            <span class="text-sm text-muted">/ 2,500 cc</span>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span id="today-cups-badge" class="inline-block px-3 py-1 rounded-full bg-washi border border-sand text-xs font-bold text-ink">
+                            0 / 10 杯
+                        </span>
+                        <p id="today-encouragement" class="text-xs text-muted mt-1">從第一杯溫開水開始吧 ✨</p>
+                    </div>
+                </div>
+                <div class="w-full h-3.5 bg-washi rounded-full overflow-hidden border border-sand/80 p-0.5">
+                    <div id="today-progress-bar" class="h-full bg-gradient-to-r from-aqua to-matcha rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
+                </div>
+            </div>
+        </header>
+
+        <!-- 區塊一：今日 10 杯 250cc 打卡區 -->
+        <section class="bg-cream border border-sand rounded-3xl p-5 sm:p-7 shadow-soft">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h2 class="text-lg sm:text-xl font-bold text-ink flex items-center gap-2">
+                        <span>🥤 今日喝水打卡</span>
+                    </h2>
+                    <p class="text-xs text-muted mt-0.5">每喝完一杯 250cc，就輕點水杯蓋上完成章</p>
+                </div>
+                <button onclick="resetTodayCups()" class="text-xs text-muted hover:text-ink px-3 py-1.5 rounded-xl hover:bg-washi border border-transparent hover:border-sand transition">
+                    ↺ 重設今日
+                </button>
+            </div>
+
+            <!-- 10 個水杯網格（手機 2 欄 / 平板以上 5 欄） -->
+            <div id="cups-grid" class="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-3.5">
+                <!-- 由 JS 動態生成 10 個水杯卡片 -->
+            </div>
+        </section>
+
+        <!-- 區塊二：本週達成率 & 跨週累積視覺圖表 -->
+        <section class="bg-cream border border-sand rounded-3xl p-5 sm:p-7 shadow-soft space-y-6">
+            <div>
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+                    <div>
+                        <h2 class="text-lg sm:text-xl font-bold text-ink flex items-center gap-2">
+                            <span>📊 本週飲水小統計</span>
+                        </h2>
+                        <p id="week-range-label" class="text-xs text-muted mt-0.5">週一至週日每日杯數紀錄（滿 10 杯戴皇冠 👑）</p>
+                    </div>
+                    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-matcha-light/60 border border-matcha/30 text-xs font-medium text-matcha-dark self-start sm:self-auto">
+                        <span>本週累計：</span>
+                        <span id="week-total-cups" class="font-bold text-sm">0</span>
+                        <span>杯 (<span id="week-total-cc">0</span> cc)</span>
+                    </div>
+                </div>
+
+                <!-- 本週 7 天長條圖 -->
+                <div id="weekly-chart" class="grid grid-cols-7 gap-2 sm:gap-3 pt-4 pb-2 px-2 bg-washi/70 rounded-2xl border border-sand/70">
+                    <!-- 由 JS 動態生成週一至週日長條 -->
+                </div>
+            </div>
+
+            <!-- 跨週累積足跡圖表 -->
+            <div class="pt-5 border-t border-dashed border-sand">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+                    <div>
+                        <h3 class="text-base sm:text-lg font-bold text-ink flex items-center gap-2">
+                            <span>🗓️ 歷週累積足跡（近 6 週）</span>
+                        </h3>
+                        <p class="text-xs text-muted mt-0.5">每週結束後會自動歸檔保留，記錄你的長期堅持（★ 為單日滿 10 杯天數）</p>
+                    </div>
+                    <div class="text-xs text-muted bg-washi px-3 py-1.5 rounded-xl border border-sand self-start sm:self-auto">
+                        生涯總累計：<strong id="lifetime-total-cups" class="text-ink">0</strong> 杯
+                    </div>
+                </div>
+
+                <div id="history-weeks-chart" class="grid grid-cols-6 gap-2 sm:gap-3 pt-4 pb-2 px-2 bg-washi/70 rounded-2xl border border-sand/70">
+                    <!-- 由 JS 動態生成近 6 週累積長條 -->
+                </div>
+            </div>
+        </section>
+
+        <!-- 區塊三：每月水彩著色累積拼圖畫布 -->
+        <section class="bg-cream border border-sand rounded-3xl p-5 sm:p-7 shadow-soft">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                <div>
+                    <h2 class="text-lg sm:text-xl font-bold text-ink flex items-center gap-2">
+                        <span>🎨 本月水潤拼圖畫布</span>
+                    </h2>
+                    <p id="monthly-puzzle-desc" class="text-xs text-muted mt-0.5">每喝 1 杯點亮 1 格，本月累積 300 杯即可完整解鎖整幅圖畫！</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <label class="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-aqua-light hover:bg-aqua/30 text-aqua-dark text-xs font-bold transition active:scale-95">
+                        <span>📷 上傳我的圖片</span>
+                        <input type="file" id="puzzle-image-upload" accept="image/*" class="hidden" onchange="handlePuzzleImageUpload(event)">
+                    </label>
+                    <button onclick="cyclePresetIllustration()" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-washi hover:bg-sand/50 border border-sand text-xs font-medium text-ink transition active:scale-95">
+                        <span>🖼️ 切換預設插畫</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 拼圖進度與畫布容器 -->
+            <div class="bg-washi p-3 sm:p-4 rounded-2xl border border-sand space-y-3">
+                <div class="flex items-center justify-between text-xs">
+                    <span class="font-medium text-ink">本月解鎖進度：<strong id="monthly-unlocked-count" class="text-aqua-dark">0</strong> / 300 格</span>
+                    <span id="monthly-percent-label" class="px-2.5 py-0.5 rounded-full bg-cream border border-sand font-bold text-matcha-dark">0%</span>
+                </div>
+
+                <!-- 4:3 比例圖片與 20x15 = 300 格水霧遮罩 -->
+                <div class="relative w-full aspect-[4/3] rounded-2xl overflow-hidden border border-sand bg-cream shadow-inner select-none">
+                    <!-- 底層圖片（支援自訂上傳或內建日系插畫 SVG） -->
+                    <img id="puzzle-bg-img" src="" alt="每月目標插畫" class="w-full h-full object-cover">
+
+                    <!-- 上層 300 格遮罩網格 (20 columns x 15 rows) -->
+                    <div id="puzzle-grid-overlay" class="absolute inset-0 grid grid-cols-20" style="grid-template-columns: repeat(20, minmax(0, 1fr)); grid-template-rows: repeat(15, minmax(0, 1fr));">
+                        <!-- 由 JS 動態生成 300 個小方格 -->
+                    </div>
+
+                    <!-- 100% 完成慶祝徽章 -->
+                    <div id="puzzle-complete-badge" class="hidden absolute bottom-3 right-3 px-3.5 py-1.5 rounded-full bg-cream/95 border border-matcha text-matcha-dark text-xs font-bold shadow-soft backdrop-blur-sm">
+                        🎉 本月 300 杯達成！畫作已完整解鎖
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 區塊四：自訂自我獎勵機制 -->
+        <section class="bg-cream border border-sand rounded-3xl p-5 sm:p-7 shadow-soft">
+            <div class="flex items-center justify-between gap-2 mb-4">
+                <div>
+                    <h2 class="text-lg sm:text-xl font-bold text-ink flex items-center gap-2">
+                        <span>🎁 我的喝水小獎勵</span>
+                    </h2>
+                    <p class="text-xs text-muted mt-0.5">累積達標就能兌換給自己的小確幸，隨時可新增或編輯</p>
+                </div>
+                <button onclick="openRewardModal()" class="inline-flex items-center gap-1 px-3.5 py-2 rounded-2xl bg-matcha hover:bg-matcha-dark text-white text-xs sm:text-sm font-bold shadow-card transition active:scale-95">
+                    <span>＋ 新增獎勵</span>
+                </button>
+            </div>
+
+            <!-- 獎勵卡片列表 -->
+            <div id="rewards-list" class="space-y-3">
+                <!-- 由 JS 動態生成獎勵卡片 -->
+            </div>
+        </section>
+
+        <!-- 頁尾小語 -->
+        <footer class="text-center text-xs text-muted pt-2 pb-6">
+            <p>みずの記録 • 每一口水都是給身體的溫柔禮物 🌿</p>
+        </footer>
+    </div>
+
+    <!-- ==================== 彈窗 1：新增 / 編輯獎勵 Modal ==================== -->
+    <div id="reward-modal" class="hidden fixed inset-0 z-50 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-cream border border-sand rounded-3xl max-w-md w-full p-6 shadow-xl space-y-5 animate-pop">
+            <div class="flex items-center justify-between">
+                <h3 id="reward-modal-title" class="text-lg font-bold text-ink">✨ 新增自我獎勵</h3>
+                <button onclick="closeRewardModal()" class="w-8 h-8 rounded-full bg-washi hover:bg-sand/60 flex items-center justify-center text-muted hover:text-ink transition">✕</button>
+            </div>
+
+            <div class="space-y-4">
+                <!-- 選擇可愛圖示 -->
+                <div>
+                    <label class="block text-xs font-bold text-ink mb-2">1. 挑選一個小圖示</label>
+                    <div id="emoji-picker" class="grid grid-cols-6 gap-2">
+                        <!-- 由 JS 生成表情符號選項 -->
+                    </div>
+                </div>
+
+                <!-- 輸入獎勵名稱 -->
+                <div>
+                    <label for="reward-title-input" class="block text-xs font-bold text-ink mb-1.5">2. 達成後的獎勵內容</label>
+                    <input type="text" id="reward-title-input" placeholder="例如：買一杯無糖抹茶拿鐵 🍵" class="w-full px-4 py-2.5 rounded-2xl bg-washi border border-sand text-sm text-ink focus:outline-none focus:border-aqua">
+                </div>
+
+                <!-- 設定目標累計杯數 -->
+                <div>
+                    <label for="reward-target-input" class="block text-xs font-bold text-ink mb-1.5">3. 目標累計杯數（每杯 250cc）</label>
+                    <div class="flex items-center gap-3">
+                        <input type="number" id="reward-target-input" min="1" max="3650" value="30" class="w-32 px-4 py-2.5 rounded-2xl bg-washi border border-sand text-sm font-bold text-ink focus:outline-none focus:border-aqua">
+                        <span id="reward-target-hint" class="text-xs text-muted">約 3 天達標 (7,500 cc)</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2">
+                <button onclick="closeRewardModal()" class="px-4 py-2.5 rounded-2xl bg-washi hover:bg-sand/50 text-xs font-bold text-muted transition">取消</button>
+                <button onclick="saveRewardForm()" class="px-5 py-2.5 rounded-2xl bg-matcha hover:bg-matcha-dark text-white text-xs font-bold shadow-card transition">儲存獎勵</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 彈窗 2：跨裝置雲端同步 Modal ==================== -->
+    <div id="sync-modal" class="hidden fixed inset-0 z-50 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-cream border border-sand rounded-3xl max-w-md w-full p-6 shadow-xl space-y-5">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-ink">☁️ 跨裝置即時同步</h3>
+                <button onclick="closeSyncModal()" class="w-8 h-8 rounded-full bg-washi hover:bg-sand/60 flex items-center justify-center text-muted hover:text-ink transition">✕</button>
+            </div>
+
+            <p class="text-xs text-muted leading-relaxed">
+                在手機、平板或電腦上使用同一組<strong>「同步金鑰」</strong>，即可即時雙向同步您的喝水紀錄、歷週圖表與小獎勵！
+            </p>
+
+            <!-- 目前裝置的同步金鑰 -->
+            <div class="bg-washi p-4 rounded-2xl border border-sand space-y-2">
+                <span class="text-xs font-bold text-muted block">目前使用的同步金鑰：</span>
+                <div class="flex items-center gap-2">
+                    <input type="text" id="current-sync-code-display" readonly class="flex-1 px-3 py-2 rounded-xl bg-cream border border-sand text-xs font-mono font-bold text-aqua-dark select-all">
+                    <button onclick="copySyncCode()" class="px-3 py-2 rounded-xl bg-aqua text-white text-xs font-bold hover:bg-aqua-dark transition shrink-0">複製金鑰</button>
+                </div>
+                <button onclick="copyShareUrlWithSync()" class="w-full mt-1 py-2 rounded-xl bg-cream hover:bg-aqua-light/50 border border-sand text-xs font-bold text-ink transition">
+                    🔗 複製含金鑰的專屬網址（傳到另一台裝置直接開）
+                </button>
+            </div>
+
+            <!-- 切換 / 綁定其他裝置的金鑰 -->
+            <div class="space-y-2 pt-2 border-t border-dashed border-sand">
+                <label for="input-sync-code" class="block text-xs font-bold text-ink">輸入另一台裝置的同步金鑰：</label>
+                <div class="flex items-center gap-2">
+                    <input type="text" id="input-sync-code" placeholder="貼上同步金鑰..." class="flex-1 px-3.5 py-2.5 rounded-2xl bg-washi border border-sand text-xs font-mono text-ink focus:outline-none focus:border-aqua">
+                    <button onclick="applyNewSyncCode()" class="px-4 py-2.5 rounded-2xl bg-matcha hover:bg-matcha-dark text-white text-xs font-bold transition shrink-0">套用同步</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 彈窗 3：放到手機桌面教學 Modal ==================== -->
+    <div id="install-modal" class="hidden fixed inset-0 z-50 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-cream border border-sand rounded-3xl max-w-md w-full p-6 shadow-xl space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-ink">📲 加到手機桌面當成 App</h3>
+                <button onclick="closeInstallModal()" class="w-8 h-8 rounded-full bg-washi hover:bg-sand/60 flex items-center justify-center text-muted hover:text-ink transition">✕</button>
+            </div>
+
+            <p class="text-xs text-muted leading-relaxed">
+                不用去商店下載！將本網頁加入手機主畫面後，就能擁有專屬可愛水滴圖示，點開即享全螢幕手帳體驗：
+            </p>
+
+            <div class="space-y-3 text-xs">
+                <div class="bg-washi p-3.5 rounded-2xl border border-sand space-y-1">
+                    <div class="font-bold text-ink flex items-center gap-1.5">🍎 iPhone / iPad（請用 Safari 開啟）</div>
+                    <p class="text-muted">點擊畫面下方工具列的 <strong>「分享 ⬆️」</strong> → 往下滑選擇 <strong>「加入主畫面 ➕」</strong> → 按下右上角 <strong>「新增」</strong>。</p>
+                </div>
+                <div class="bg-washi p-3.5 rounded-2xl border border-sand space-y-1">
+                    <div class="font-bold text-ink flex items-center gap-1.5">🤖 Android 手機（請用 Chrome 開啟）</div>
+                    <p class="text-muted">點擊右上角選單 <strong>「⋮」</strong> → 選擇 <strong>「加到主畫面」</strong> 或 <strong>「安裝應用程式」</strong>。</p>
+                </div>
+            </div>
+
+            <button onclick="copyShareUrlWithSync()" class="w-full py-2.5 rounded-2xl bg-aqua hover:bg-aqua-dark text-white text-xs font-bold transition">
+                📋 複製目前網址（方便貼到手機瀏覽器）
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== 核心 JavaScript（含本地狀態 + 跨裝置雲端同步） ==================== -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 1. 常數與預設資料設定
+        const STORAGE_KEY = 'mizu_water_journal_v3';
+        const SYNC_CODE_KEY = 'mizu_water_sync_code';
+        const DAILY_GOAL = 10;       // 每天 10 杯
+        const CUP_VOLUME = 250;      // 每杯 250cc
+        const MONTHLY_GRID_TOTAL = 300; // 每月拼圖 300 格 (20x15)
+
+        const EMOJI_OPTIONS = ['🍵', '🍰', '🛍️', '📚', '🎬', '🛁', '🌸', '🍣', '✈️', '🎨', '💐', '🧸'];
+
+        // 內建 3 款日系手繪感 SVG 插畫（用於每月拼圖畫布）
+        const PRESET_ILLUSTRATIONS = [
+            {
+                name: '富士山與春日櫻花',
+                url: 'data:image/svg+xml;utf8,' + encodeURIComponent(`
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+                        <defs>
+                            <linearGradient id="sky1" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#D9EEF5"/>
+                                <stop offset="65%" stop-color="#FAF3EA"/>
+                                <stop offset="100%" stop-color="#F7E3E3"/>
+                            </linearGradient>
+                        </defs>
+                        <rect width="800" height="600" fill="url(#sky1)"/>
+                        <circle cx="620" cy="140" r="55" fill="#F6C8C8" opacity="0.85"/>
+                        <path d="M120 480 L360 190 Q400 155 440 190 L680 480 Z" fill="#7CA8BE"/>
+                        <path d="M360 190 Q400 155 440 190 L495 258 L455 245 L425 270 L400 245 L370 272 L340 248 L305 260 Z" fill="#FFFDF9"/>
+                        <path d="M0 470 Q220 440 420 475 T800 465 L800 600 L0 600 Z" fill="#9BB594"/>
+                        <path d="M0 510 Q280 490 520 520 T800 505 L800 600 L0 600 Z" fill="#7D9B76"/>
+                        <circle cx="130" cy="240" r="85" fill="#F2B8C0" opacity="0.9"/>
+                        <circle cx="210" cy="280" r="65" fill="#F7CDD2" opacity="0.9"/>
+                        <circle cx="90" cy="300" r="60" fill="#EA9FA9" opacity="0.85"/>
+                        <text x="400" y="565" font-family="sans-serif" font-size="22" fill="#FFFDF9" text-anchor="middle" letter-spacing="6">みずの記録 • 富士山と桜</text>
+                    </svg>
+                `)
+            },
+            {
+                name: '靜謐抹茶與和菓子午茶',
+                url: 'data:image/svg+xml;utf8,' + encodeURIComponent(`
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+                        <rect width="800" height="600" fill="#F5EFE6"/>
+                        <rect x="0" y="410" width="800" height="190" fill="#E3D5C3"/>
+                        <ellipse cx="400" cy="430" rx="260" ry="45" fill="#D2C0AA"/>
+                        <path d="M250 300 Q250 430 400 430 Q550 430 550 300 Z" fill="#6D8867"/>
+                        <ellipse cx="400" cy="300" rx="150" ry="32" fill="#8FA889"/>
+                        <ellipse cx="400" cy="302" rx="135" ry="25" fill="#A9C69F"/>
+                        <circle cx="400" cy="302" r="35" fill="#CBE0C2" opacity="0.6"/>
+                        <circle cx="610" cy="415" r="36" fill="#F3B8C2"/>
+                        <circle cx="610" cy="415" r="10" fill="#F9E3A6"/>
+                        <text x="400" y="130" font-family="sans-serif" font-size="26" fill="#6D8867" text-anchor="middle" letter-spacing="6">ほっと一息 • 抹茶時間</text>
+                    </svg>
+                `)
+            },
+            {
+                name: '星夜深海藍鯨物語',
+                url: 'data:image/svg+xml;utf8,' + encodeURIComponent(`
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+                        <defs>
+                            <linearGradient id="night" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#2D4A5E"/>
+                                <stop offset="100%" stop-color="#69A3B8"/>
+                            </linearGradient>
+                        </defs>
+                        <rect width="800" height="600" fill="url(#night)"/>
+                        <circle cx="160" cy="120" r="4" fill="#FFFDF9"/>
+                        <circle cx="290" cy="90" r="3" fill="#FFFDF9"/>
+                        <circle cx="520" cy="110" r="5" fill="#FFFDF9"/>
+                        <circle cx="660" cy="160" r="3" fill="#FFFDF9"/>
+                        <path d="M210 330 Q340 210 530 280 Q610 310 660 250 Q650 320 680 350 Q600 350 550 380 Q360 440 210 330 Z" fill="#9CD0E0"/>
+                        <path d="M235 340 Q370 400 530 365 Q410 425 235 340 Z" fill="#E8F5F9"/>
+                        <circle cx="285" cy="315" r="7" fill="#2D4A5E"/>
+                        <path d="M380 235 Q365 180 340 190 M390 235 Q405 175 430 185" stroke="#D9F0F7" stroke-width="5" fill="none" stroke-linecap="round"/>
+                        <text x="400" y="530" font-family="sans-serif" font-size="22" fill="#E8F5F9" text-anchor="middle" letter-spacing="6">星とクジラの夜</text>
+                    </svg>
+                `)
+            }
+        ];
+
+        // 2. 應用程式狀態管理
+        let appState = {
+            dailyLogs: {}, // 格式: { "2026-11-24": 6, ... }
+            rewards: [
+                { id: 'r1', emoji: '🍵', title: '買一杯最愛的無糖抹茶拿鐵', targetCups: 30, claimed: false },
+                { id: 'r2', emoji: '🍰', title: '去咖啡廳吃一塊手作戚風蛋糕', targetCups: 70, claimed: false },
+                { id: 'r3', emoji: '🛍️', title: '挑選一個喜歡的文具或香氛小物', targetCups: 150, claimed: false }
+            ],
+            puzzle: {
+                presetIndex: 0,
+                customImage: null,
+                // 儲存 0~299 的隨機解鎖順序陣列，讓每次塗滿都有拼圖散開的驚喜
+                tileOrder: []
+            },
+            updatedAt: 0
+        };
+
+        let editingRewardId = null;
+        let selectedEmoji = '🍵';
+
+        // 雲端同步變數
+        let db = null;
+        let currentUser = null;
+        let syncCode = '';
+        let unsubscribeSnapshot = null;
+        let isApplyingRemote = false;
+
+        // 3. 日期與工具函式
+        function getTodayStr(dateObj = new Date()) {
+            const y = dateObj.getFullYear();
+            const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const d = String(dateObj.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        function getCurrentMonthPrefix(dateObj = new Date()) {
+            const y = dateObj.getFullYear();
+            const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+            return `${y}-${m}`;
+        }
+
+        // 取得指定日期所屬那一週的週一 Date 物件
+        function getMondayOfWeek(dateObj) {
+            const d = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+            const day = d.getDay(); // 0(日) ~ 6(六)
+            const diff = day === 0 ? -6 : 1 - day;
+            d.setDate(d.getDate() + diff);
+            return d;
+        }
+
+        // 產生洗牌後的 0..299 陣列
+        function generateShuffledOrder(count = MONTHLY_GRID_TOTAL) {
+            const arr = Array.from({ length: count }, (_, i) => i);
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        // 輕量 Toast 通知
+        function showToast(message) {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const el = document.createElement('div');
+            el.className = 'px-4 py-2.5 rounded-2xl bg-ink/90 text-cream text-xs font-medium shadow-lg backdrop-blur-xs transition-all duration-300 transform translate-y-0 opacity-100';
+            el.textContent = message;
+            container.appendChild(el);
+            setTimeout(() => {
+                el.classList.add('opacity-0', '-translate-y-2');
+                setTimeout(() => el.remove(), 300);
+            }, 2400);
+        }
+
+        // 4. 狀態載入與儲存（本地快取 + 雲端即時同步）
+        function loadState() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    appState = {
+                        ...appState,
+                        ...parsed,
+                        dailyLogs: parsed.dailyLogs || {},
+                        rewards: Array.isArray(parsed.rewards) ? parsed.rewards : appState.rewards,
+                        puzzle: {
+                            ...appState.puzzle,
+                            ...(parsed.puzzle || {})
+                        }
+                    };
+                }
+            } catch (e) {
+                console.warn('讀取本地紀錄失敗:', e);
+            }
+
+            if (!Array.isArray(appState.puzzle.tileOrder) || appState.puzzle.tileOrder.length !== MONTHLY_GRID_TOTAL) {
+                appState.puzzle.tileOrder = generateShuffledOrder(MONTHLY_GRID_TOTAL);
+            }
+            ensureTodayRecord();
+        }
+
+        function ensureTodayRecord() {
+            const today = getTodayStr();
+            if (typeof appState.dailyLogs[today] !== 'number') {
+                appState.dailyLogs[today] = 0;
+            }
+        }
+
+        async function saveState(skipCloud = false) {
+            appState.updatedAt = Date.now();
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+            } catch (e) {
+                console.warn('本地儲存空間不足（可能是自訂圖片過大）:', e);
+            }
+
+            if (!skipCloud && !isApplyingRemote && db && currentUser && syncCode) {
+                try {
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'water_sync_rooms', syncCode);
+                    await setDoc(docRef, {
+                        stateJson: JSON.stringify(appState),
+                        updatedAt: appState.updatedAt
+                    }, { merge: true });
+                } catch (err) {
+                    console.warn('雲端同步寫入略過:', err);
+                }
+            }
+        }
+
+        // 5. 跨裝置同步初始化與訂閱
+        async function initCloudSync() {
+            loadState();
+            renderAll();
+
+            // 檢查網址是否帶有 ?sync=xxx
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlSync = urlParams.get('sync');
+            let savedCode = '';
+            try {
+                savedCode = localStorage.getItem(SYNC_CODE_KEY) || '';
+            } catch (e) {}
+
+            if (urlSync && urlSync.trim().length >= 4) {
+                syncCode = urlSync.trim();
+                try { localStorage.setItem(SYNC_CODE_KEY, syncCode); } catch (e) {}
+            } else if (savedCode) {
+                syncCode = savedCode;
+            } else {
+                syncCode = 'mizu-' + Math.random().toString(36).substring(2, 8);
+                try { localStorage.setItem(SYNC_CODE_KEY, syncCode); } catch (e) {}
+            }
+
+            updateSyncUI(false);
+
+            // 若環境有提供 Firebase 設定則啟用跨裝置即時同步
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                try {
+                    const firebaseConfig = JSON.parse(__firebase_config);
+                    const app = initializeApp(firebaseConfig);
+                    const auth = getAuth(app);
+                    db = getFirestore(app);
+
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        const cred = await signInWithCustomToken(auth, __initial_auth_token);
+                        currentUser = cred.user;
+                    } else {
+                        const cred = await signInAnonymously(auth);
+                        currentUser = cred.user;
+                    }
+
+                    subscribeToSyncCode(syncCode);
+                } catch (err) {
+                    console.warn('雲端同步初始化失敗，目前使用單機模式:', err);
+                }
+            }
+        }
+
+        function subscribeToSyncCode(code) {
+            if (!db || !currentUser || !code) return;
+            if (unsubscribeSnapshot) {
+                unsubscribeSnapshot();
+                unsubscribeSnapshot = null;
+            }
+
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'water_sync_rooms', code);
+
+            unsubscribeSnapshot = onSnapshot(docRef, (snap) => {
+                updateSyncUI(true);
+                if (snap.exists()) {
+                    const data = snap.data();
+                    if (data && data.stateJson && data.updatedAt > (appState.updatedAt || 0)) {
+                        try {
+                            isApplyingRemote = true;
+                            const remoteState = JSON.parse(data.stateJson);
+                            appState = {
+                                ...appState,
+                                ...remoteState,
+                                dailyLogs: remoteState.dailyLogs || {},
+                                rewards: Array.isArray(remoteState.rewards) ? remoteState.rewards : appState.rewards,
+                                puzzle: {
+                                    ...appState.puzzle,
+                                    ...(remoteState.puzzle || {})
+                                }
+                            };
+                            ensureTodayRecord();
+                            localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+                            renderAll();
+                        } catch (e) {
+                            console.warn('解析遠端資料失敗:', e);
+                        } finally {
+                            isApplyingRemote = false;
+                        }
+                    }
+                } else {
+                    // 房間尚無資料，將目前本地資料推送上去作為初始值
+                    saveState(false);
+                }
+            }, (error) => {
+                console.warn('監聽雲端同步發生錯誤:', error);
+                updateSyncUI(false);
+            });
+        }
+
+        function updateSyncUI(connected) {
+            const dot = document.getElementById('sync-status-dot');
+            const label = document.getElementById('sync-btn-label');
+            const displayInput = document.getElementById('current-sync-code-display');
+            if (displayInput) displayInput.value = syncCode;
+            if (dot && label) {
+                if (connected) {
+                    dot.className = 'w-2 h-2 rounded-full bg-matcha animate-pulse';
+                    label.textContent = '☁️ 雲端已同步';
+                } else {
+                    dot.className = 'w-2 h-2 rounded-full bg-aqua';
+                    label.textContent = '☁️ 跨裝置同步';
+                }
+            }
+        }
+
+        // 6. 計算統計數據
+        function getLifetimeCups() {
+            return Object.values(appState.dailyLogs).reduce((sum, val) => sum + (Number(val) || 0), 0);
+        }
+
+        function getCurrentMonthCups() {
+            const prefix = getCurrentMonthPrefix();
+            return Object.entries(appState.dailyLogs).reduce((sum, [dateStr, val]) => {
+                return dateStr.startsWith(prefix) ? sum + (Number(val) || 0) : sum;
+            }, 0);
+        }
+
+        // 7. 畫面渲染函式群
+        function renderAll() {
+            renderHeaderDate();
+            renderTodayProgressAndCups();
+            renderWeeklyChart();
+            renderHistoryWeeksChart();
+            renderMonthlyPuzzle();
+            renderRewards();
+        }
+
+        function renderHeaderDate() {
+            const now = new Date();
+            const weekNames = ['日', '一', '二', '三', '四', '五', '六'];
+            const formatted = `${now.getFullYear()} 年 ${now.getMonth() + 1} 月 ${now.getDate()} 日（週${weekNames[now.getDay()]}）`;
+            const dateLabelEl = document.getElementById('current-date-label');
+            if (dateLabelEl) {
+                dateLabelEl.textContent = formatted;
+            }
+        }
+
+        function renderTodayProgressAndCups() {
+            const today = getTodayStr();
+            const count = Math.min(DAILY_GOAL, Math.max(0, appState.dailyLogs[today] || 0));
+            const totalCc = count * CUP_VOLUME;
+            const pct = Math.round((count / DAILY_GOAL) * 100);
+
+            document.getElementById('today-cc').textContent = totalCc.toLocaleString();
+            document.getElementById('today-cups-badge').textContent = `${count} / ${DAILY_GOAL} 杯`;
+            document.getElementById('today-progress-bar').style.width = `${pct}%`;
+
+            const encEl = document.getElementById('today-encouragement');
+            if (count === 0) encEl.textContent = '從第一杯溫開水開始吧 ✨';
+            else if (count < 4) encEl.textContent = '很棒的開始！繼續保持水潤 🌱';
+            else if (count < 7) encEl.textContent = '已經完成一半啦，身體正在感謝你 💧';
+            else if (count < 10) encEl.textContent = '就快達標了！最後幾杯加油 🌿';
+            else encEl.textContent = '🎉 太厲害了！今日 2,500cc 完美達標！';
+
+            // 渲染 10 個手繪感水杯按鈕
+            const grid = document.getElementById('cups-grid');
+            grid.innerHTML = '';
+
+            for (let i = 1; i <= DAILY_GOAL; i++) {
+                const isChecked = i <= count;
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.onclick = () => toggleCup(i);
+                btn.className = `group relative flex flex-col items-center justify-center p-3.5 rounded-2xl border transition-all duration-200 cursor-pointer select-none ${
+                    isChecked
+                        ? 'bg-aqua-light/70 border-aqua text-ink shadow-card'
+                        : 'bg-washi/60 hover:bg-washi border-sand text-muted hover:border-aqua/60'
+                }`;
+
+                btn.innerHTML = `
+                    <div class="relative w-12 h-14 flex items-center justify-center mb-1.5">
+                        <svg viewBox="0 0 64 72" class="w-12 h-14 overflow-visible">
+                            <!-- 杯身外框 -->
+                            <path d="M14 12 L50 12 L45 60 Q44 64 40 64 L24 64 Q20 64 19 60 Z"
+                                  fill="${isChecked ? '#D4EEF5' : '#FFFDF9'}"
+                                  stroke="${isChecked ? '#5797AA' : '#C8BEB0'}"
+                                  stroke-width="2.5" stroke-linejoin="round"/>
+                            <!-- 滿水波浪 -->
+                            ${isChecked ? `
+                                <path d="M16 24 Q24 20 32 24 T48 24 L44.5 59 Q44 62 40 62 L24 62 Q20 62 19.5 59 Z"
+                                      fill="#7EB9CA" opacity="0.85"/>
+                                <circle cx="26" cy="36" r="2" fill="#FFFDF9" opacity="0.8"/>
+                                <circle cx="37" cy="45" r="2.5" fill="#FFFDF9" opacity="0.8"/>
+                            ` : ''}
+                            <!-- 可愛小表情 -->
+                            <circle cx="27" cy="42" r="1.8" fill="${isChecked ? '#3B5C66' : '#A99F94'}"/>
+                            <circle cx="37" cy="42" r="1.8" fill="${isChecked ? '#3B5C66' : '#A99F94'}"/>
+                            <path d="${isChecked ? 'M29 46 Q32 49 35 46' : 'M30 46 L34 46'}"
+                                  stroke="${isChecked ? '#3B5C66' : '#A99F94'}" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+                        </svg>
+                        ${isChecked ? `
+                            <span class="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-matcha text-white text-[11px] font-bold flex items-center justify-center shadow-xs">✓</span>
+                        ` : ''}
+                    </div>
+                    <span class="text-xs font-bold ${isChecked ? 'text-aqua-dark' : 'text-ink'}">第 ${i} 杯</span>
+                    <span class="text-[11px] ${isChecked ? 'text-aqua-dark/80' : 'text-muted'}">250cc</span>
+                `;
+                grid.appendChild(btn);
+            }
+        }
+
+        function toggleCup(cupIndex) {
+            const today = getTodayStr();
+            const current = appState.dailyLogs[today] || 0;
+            // 若點擊目前最後一杯則取消該杯，否則設定為該杯數
+            const nextVal = (current === cupIndex) ? cupIndex - 1 : cupIndex;
+            appState.dailyLogs[today] = nextVal;
+
+            saveState();
+            renderAll();
+
+            // 加上點擊彈跳回饋
+            const cards = document.getElementById('cups-grid').children;
+            if (cards[cupIndex - 1]) {
+                cards[cupIndex - 1].classList.add('animate-pop');
+            }
+
+            if (nextVal === DAILY_GOAL) {
+                showToast('🎉 太棒了！今天喝滿 10 杯 (2,500cc) 囉！');
+            }
+        }
+
+        function resetTodayCups() {
+            const today = getTodayStr();
+            if ((appState.dailyLogs[today] || 0) === 0) return;
+            appState.dailyLogs[today] = 0;
+            saveState();
+            renderAll();
+            showToast('已重設今日喝水杯數');
+        }
+
+        // 本週（週一至週日）長條圖
+        function renderWeeklyChart() {
+            const now = new Date();
+            const monday = getMondayOfWeek(now);
+            const todayStr = getTodayStr(now);
+            const dayLabels = ['週一', '週二', '週三', '週四', '週五', '週六', '週日'];
+
+            const sunday = new Date(monday);
+            sunday.setDate(monday.getDate() + 6);
+            document.getElementById('week-range-label').textContent =
+                `${monday.getMonth() + 1}/${monday.getDate()} ~ ${sunday.getMonth() + 1}/${sunday.getDate()} 每日杯數（滿 10 杯戴皇冠 👑）`;
+
+            const chartEl = document.getElementById('weekly-chart');
+            chartEl.innerHTML = '';
+
+            let weekSum = 0;
+            for (let i = 0; i < 7; i++) {
+                const d = new Date(monday);
+                d.setDate(monday.getDate() + i);
+                const dStr = getTodayStr(d);
+                const cups = Math.min(DAILY_GOAL, Math.max(0, appState.dailyLogs[dStr] || 0));
+                weekSum += cups;
+
+                const isToday = dStr === todayStr;
+                const isFull = cups >= DAILY_GOAL;
+                const heightPct = Math.round((cups / DAILY_GOAL) * 100);
+
+                const col = document.createElement('div');
+                col.className = 'flex flex-col items-center';
+                col.innerHTML = `
+                    <div class="h-5 flex items-center justify-center text-xs mb-1">
+                        ${isFull ? '👑' : `<span class="text-[11px] font-bold ${cups > 0 ? 'text-ink' : 'text-muted/60'}">${cups}</span>`}
+                    </div>
+                    <div class="w-full max-w-[34px] h-28 bg-cream rounded-xl border ${isToday ? 'border-aqua ring-2 ring-aqua-light' : 'border-sand'} p-1 flex items-end justify-center overflow-hidden">
+                        <div class="w-full rounded-lg transition-all duration-500 ${isFull ? 'bg-matcha' : 'bg-aqua'}" style="height: ${heightPct}%"></div>
+                    </div>
+                    <span class="mt-1.5 text-[11px] font-bold ${isToday ? 'text-aqua-dark' : 'text-muted'}">${dayLabels[i]}</span>
+                    <span class="text-[10px] text-muted/80">${d.getMonth() + 1}/${d.getDate()}</span>
+                `;
+                chartEl.appendChild(col);
+            }
+
+            document.getElementById('week-total-cups').textContent = weekSum;
+            document.getElementById('week-total-cc').textContent = (weekSum * CUP_VOLUME).toLocaleString();
+        }
+
+        // 近 6 週跨週累積長條圖（過去 5 週 + 本週）
+        function renderHistoryWeeksChart() {
+            const now = new Date();
+            const currentMonday = getMondayOfWeek(now);
+            const chartEl = document.getElementById('history-weeks-chart');
+            chartEl.innerHTML = '';
+
+            const weeksData = [];
+            for (let w = 5; w >= 0; w--) {
+                const start = new Date(currentMonday);
+                start.setDate(currentMonday.getDate() - w * 7);
+
+                let totalCups = 0;
+                let perfectDays = 0;
+                for (let d = 0; d < 7; d++) {
+                    const dayObj = new Date(start);
+                    dayObj.setDate(start.getDate() + d);
+                    const c = Math.min(DAILY_GOAL, Math.max(0, appState.dailyLogs[getTodayStr(dayObj)] || 0));
+                    totalCups += c;
+                    if (c >= DAILY_GOAL) perfectDays++;
+                }
+
+                weeksData.push({
+                    label: w === 0 ? '本週' : `${start.getMonth() + 1}/${start.getDate()}週`,
+                    isCurrent: w === 0,
+                    totalCups,
+                    perfectDays
+                });
+            }
+
+            const maxWeekTarget = 70; // 一週滿標 70 杯
+            weeksData.forEach(item => {
+                const heightPct = Math.min(100, Math.round((item.totalCups / maxWeekTarget) * 100));
+                const col = document.createElement('div');
+                col.className = 'flex flex-col items-center';
+                col.innerHTML = `
+                    <div class="text-[11px] font-bold ${item.totalCups > 0 ? 'text-ink' : 'text-muted/60'} mb-1">
+                        ${item.totalCups}杯
+                    </div>
+                    <div class="w-full max-w-[38px] h-24 bg-cream rounded-xl border ${item.isCurrent ? 'border-matcha ring-2 ring-matcha-light' : 'border-sand'} p-1 flex items-end justify-center overflow-hidden">
+                        <div class="w-full rounded-lg transition-all duration-500 ${item.isCurrent ? 'bg-matcha' : 'bg-aqua/85'}" style="height: ${heightPct}%"></div>
+                    </div>
+                    <span class="mt-1.5 text-[11px] font-bold ${item.isCurrent ? 'text-matcha-dark' : 'text-muted'}">${item.label}</span>
+                    <span class="text-[10px] text-amber-600/90 font-medium">★ ${item.perfectDays}天</span>
+                `;
+                chartEl.appendChild(col);
+            });
+
+            document.getElementById('lifetime-total-cups').textContent = getLifetimeCups().toLocaleString();
+        }
+
+        // 8. 每月水彩著色拼圖畫布
+        function renderMonthlyPuzzle() {
+            const monthCups = getCurrentMonthCups();
+            const unlockedCount = Math.min(MONTHLY_GRID_TOTAL, monthCups);
+            const pct = Math.round((unlockedCount / MONTHLY_GRID_TOTAL) * 100);
+
+            document.getElementById('monthly-unlocked-count').textContent = unlockedCount;
+            document.getElementById('monthly-percent-label').textContent = `${pct}%`;
+
+            const imgEl = document.getElementById('puzzle-bg-img');
+            if (appState.puzzle.customImage) {
+                imgEl.src = appState.puzzle.customImage;
+            } else {
+                const preset = PRESET_ILLUSTRATIONS[appState.puzzle.presetIndex % PRESET_ILLUSTRATIONS.length];
+                imgEl.src = preset.url;
+            }
+
+            // 找出前 unlockedCount 個要解鎖的格位索引
+            const unlockedSet = new Set(appState.puzzle.tileOrder.slice(0, unlockedCount));
+            const overlay = document.getElementById('puzzle-grid-overlay');
+            overlay.innerHTML = '';
+
+            for (let idx = 0; idx < MONTHLY_GRID_TOTAL; idx++) {
+                const tile = document.createElement('div');
+                const isUnlocked = unlockedSet.has(idx);
+                // 交錯和紙水霧色塊，未解鎖時溫柔遮蓋底圖
+                const isAlt = (Math.floor(idx / 20) + (idx % 20)) % 2 === 0;
+                tile.className = `border-[0.5px] border-cream/30 transition-opacity duration-500 ${
+                    isUnlocked
+                        ? 'opacity-0 pointer-events-none'
+                        : (isAlt ? 'bg-[#E7E0D4]/95' : 'bg-[#EFE9DF]/95')
+                }`;
+                overlay.appendChild(tile);
+            }
+
+            const completeBadge = document.getElementById('puzzle-complete-badge');
+            if (unlockedCount >= MONTHLY_GRID_TOTAL) {
+                completeBadge.classList.remove('hidden');
+            } else {
+                completeBadge.classList.add('hidden');
+            }
+        }
+
+        function cyclePresetIllustration() {
+            appState.puzzle.customImage = null;
+            appState.puzzle.presetIndex = (appState.puzzle.presetIndex + 1) % PRESET_ILLUSTRATIONS.length;
+            saveState();
+            renderMonthlyPuzzle();
+            const preset = PRESET_ILLUSTRATIONS[appState.puzzle.presetIndex];
+            showToast(`已切換為「${preset.name}」🖼️`);
+        }
+
+        function handlePuzzleImageUpload(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const img = new Image();
+                img.onload = function () {
+                    // 壓縮圖片至 800x600 以內，確保儲存順暢與同步穩定
+                    const canvas = document.createElement('canvas');
+                    const maxW = 800;
+                    const scale = Math.min(1, maxW / img.width);
+                    canvas.width = Math.round(img.width * scale);
+                    canvas.height = Math.round(img.height * scale);
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                    appState.puzzle.customImage = canvas.toDataURL('image/jpeg', 0.78);
+                    saveState();
+                    renderMonthlyPuzzle();
+                    showToast('已換上您的專屬目標圖片！📷');
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+            event.target.value = '';
+        }
+
+        // 9. 自我獎勵系統（新增、編輯、領取、刪除）
+        function renderRewards() {
+            const lifetimeCups = getLifetimeCups();
+            const listEl = document.getElementById('rewards-list');
+            listEl.innerHTML = '';
+
+            if (appState.rewards.length === 0) {
+                listEl.innerHTML = `
+                    <div class="text-center py-8 bg-washi/60 rounded-2xl border border-dashed border-sand text-xs text-muted">
+                        還沒有設定小獎勵喔！點擊右上角「＋ 新增獎勵」為自己訂個小目標吧 ✨
+                    </div>
+                `;
+                return;
+            }
+
+            // 依目標杯數由小到大排序
+            const sorted = [...appState.rewards].sort((a, b) => a.targetCups - b.targetCups);
+
+            sorted.forEach(reward => {
+                const progress = Math.min(100, Math.round((lifetimeCups / reward.targetCups) * 100));
+                const isReached = lifetimeCups >= reward.targetCups;
+
+                const card = document.createElement('div');
+                card.className = `p-4 rounded-2xl border transition-all ${
+                    reward.claimed
+                        ? 'bg-washi/70 border-sand opacity-80'
+                        : isReached
+                            ? 'bg-matcha-light/40 border-matcha shadow-card'
+                            : 'bg-washi/50 border-sand'
+                }`;
+
+                card.innerHTML = `
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div class="flex items-start sm:items-center gap-3">
+                            <div class="w-11 h-11 rounded-2xl bg-cream border border-sand flex items-center justify-center text-xl shrink-0 shadow-xs">
+                                ${reward.emoji}
+                            </div>
+                            <div>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <h3 class="text-sm font-bold text-ink ${reward.claimed ? 'line-through text-muted' : ''}">${escapeHtml(reward.title)}</h3>
+                                    <span class="px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                                        isReached ? 'bg-matcha text-white' : 'bg-cream border border-sand text-muted'
+                                    }">
+                                        目標 ${reward.targetCups} 杯
+                                    </span>
+                                </div>
+                                <p class="text-xs text-muted mt-1">
+                                    目前累計：<strong>${lifetimeCups}</strong> / ${reward.targetCups} 杯（${progress}%）
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                            ${isReached ? `
+                                <button onclick="toggleClaimReward('${reward.id}')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                                    reward.claimed
+                                        ? 'bg-cream border border-sand text-matcha-dark hover:bg-washi'
+                                        : 'bg-matcha hover:bg-matcha-dark text-white shadow-xs animate-bounce'
+                                }">
+                                    ${reward.claimed ? '✓ 已兌換' : '🎉 領取獎勵'}
+                                </button>
+                            ` : ''}
+                            <button onclick="openRewardModal('${reward.id}')" title="編輯獎勵" class="px-2.5 py-1.5 rounded-xl bg-cream hover:bg-aqua-light/60 border border-sand text-xs text-ink transition">
+                                ✏️ 編輯
+                            </button>
+                            <button onclick="deleteReward('${reward.id}')" title="刪除獎勵" class="px-2.5 py-1.5 rounded-xl bg-cream hover:bg-sakura-light border border-sand text-xs text-muted hover:text-red-500 transition">
+                                🗑️
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 獎勵進度條 -->
+                    <div class="w-full h-2 bg-cream rounded-full overflow-hidden border border-sand/80 mt-3">
+                        <div class="h-full rounded-full transition-all duration-500 ${isReached ? 'bg-matcha' : 'bg-aqua'}" style="width: ${progress}%"></div>
+                    </div>
+                `;
+                listEl.appendChild(card);
+            });
+        }
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function openRewardModal(rewardId = null) {
+            editingRewardId = rewardId;
+            const modal = document.getElementById('reward-modal');
+            const titleHeader = document.getElementById('reward-modal-title');
+            const titleInput = document.getElementById('reward-title-input');
+            const targetInput = document.getElementById('reward-target-input');
+
+            if (rewardId) {
+                const found = appState.rewards.find(r => r.id === rewardId);
+                if (found) {
+                    titleHeader.textContent = '✏️ 編輯自我獎勵';
+                    selectedEmoji = found.emoji;
+                    titleInput.value = found.title;
+                    targetInput.value = found.targetCups;
+                }
+            } else {
+                titleHeader.textContent = '✨ 新增自我獎勵';
+                selectedEmoji = '🍵';
+                titleInput.value = '';
+                targetInput.value = Math.max(10, getLifetimeCups() + 30);
+            }
+
+            renderEmojiPicker();
+            updateTargetHint();
+            modal.classList.remove('hidden');
+        }
+
+        function closeRewardModal() {
+            document.getElementById('reward-modal').classList.add('hidden');
+            editingRewardId = null;
+        }
+
+        function renderEmojiPicker() {
+            const container = document.getElementById('emoji-picker');
+            container.innerHTML = '';
+            EMOJI_OPTIONS.forEach(em => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.onclick = () => {
+                    selectedEmoji = em;
+                    renderEmojiPicker();
+                };
+                btn.className = `h-10 rounded-xl text-lg flex items-center justify-center border transition ${
+                    selectedEmoji === em
+                        ? 'bg-aqua-light border-aqua scale-105 shadow-xs'
+                        : 'bg-washi border-sand hover:bg-cream'
+                }`;
+                btn.textContent = em;
+                container.appendChild(btn);
+            });
+        }
+
+        function updateTargetHint() {
+            const val = parseInt(document.getElementById('reward-target-input').value, 10) || 0;
+            const days = Math.max(1, Math.ceil(val / DAILY_GOAL));
+            const cc = (val * CUP_VOLUME).toLocaleString();
+            document.getElementById('reward-target-hint').textContent = `約 ${days} 天達標 (${cc} cc)`;
+        }
+
+        function saveRewardForm() {
+            const title = document.getElementById('reward-title-input').value.trim();
+            const targetCups = parseInt(document.getElementById('reward-target-input').value, 10);
+
+            if (!title) {
+                showToast('請輸入獎勵內容喔！');
+                return;
+            }
+            if (!targetCups || targetCups < 1) {
+                showToast('請輸入大於 0 的目標杯數');
+                return;
+            }
+
+            if (editingRewardId) {
+                const idx = appState.rewards.findIndex(r => r.id === editingRewardId);
+                if (idx !== -1) {
+                    appState.rewards[idx] = {
+                        ...appState.rewards[idx],
+                        emoji: selectedEmoji,
+                        title,
+                        targetCups
+                    };
+                }
+                showToast('已更新小獎勵設定 ✨');
+            } else {
+                appState.rewards.push({
+                    id: 'r_' + Date.now(),
+                    emoji: selectedEmoji,
+                    title,
+                    targetCups,
+                    claimed: false
+                });
+                showToast('已新增自我獎勵 🎁');
+            }
+
+            saveState();
+            renderRewards();
+            closeRewardModal();
+        }
+
+        function toggleClaimReward(rewardId) {
+            const item = appState.rewards.find(r => r.id === rewardId);
+            if (!item) return;
+            item.claimed = !item.claimed;
+            saveState();
+            renderRewards();
+            if (item.claimed) {
+                showToast(`🎉 恭喜兌換「${item.title}」！好好犒賞自己吧`);
+            }
+        }
+
+        function deleteReward(rewardId) {
+            appState.rewards = appState.rewards.filter(r => r.id !== rewardId);
+            saveState();
+            renderRewards();
+            showToast('已移除該項獎勵');
+        }
+
+        // 10. 同步與桌面引導視窗操作
+        function openSyncModal() {
+            document.getElementById('current-sync-code-display').value = syncCode;
+            document.getElementById('input-sync-code').value = '';
+            document.getElementById('sync-modal').classList.remove('hidden');
+        }
+
+        function closeSyncModal() {
+            document.getElementById('sync-modal').classList.add('hidden');
+        }
+
+        function copyTextFallback(text, successMsg) {
+            const temp = document.createElement('textarea');
+            temp.value = text;
+            document.body.appendChild(temp);
+            temp.select();
+            try {
+                document.execCommand('copy');
+                showToast(successMsg);
+            } catch (e) {
+                showToast('請手動長按複製欄位內容');
+            }
+            document.body.removeChild(temp);
+        }
+
+        function copySyncCode() {
+            copyTextFallback(syncCode, '已複製同步金鑰！📋');
+        }
+
+        function copyShareUrlWithSync() {
+            const url = new URL(window.location.href);
+            url.searchParams.set('sync', syncCode);
+            copyTextFallback(url.toString(), '已複製專屬同步網址！🔗');
+        }
+
+        function applyNewSyncCode() {
+            const newCode = document.getElementById('input-sync-code').value.trim();
+            if (!newCode || newCode.length < 4) {
+                showToast('請輸入有效的同步金鑰（至少 4 個字元）');
+                return;
+            }
+            syncCode = newCode;
+            try { localStorage.setItem(SYNC_CODE_KEY, syncCode); } catch (e) {}
+            appState.updatedAt = 0; // 允許立即接收該房間的最新雲端資料
+            updateSyncUI(false);
+            subscribeToSyncCode(syncCode);
+            closeSyncModal();
+            showToast(`已切換同步金鑰為「${syncCode}」☁️`);
+        }
+
+        function openInstallModal() {
+            document.getElementById('install-modal').classList.remove('hidden');
+        }
+
+        function closeInstallModal() {
+            document.getElementById('install-modal').classList.add('hidden');
+        }
+
+        // 11. 動態生成手機桌面 Web App 圖示與 Manifest
+        function setupMobileWebApp() {
+            const iconSvg = `
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
+                    <rect width="180" height="180" rx="40" fill="#FAF7F2"/>
+                    <path d="M90 32 C90 32 45 84 45 114 C45 139 65 156 90 156 C115 156 135 139 135 114 C135 84 90 32 90 32 Z" fill="#7EB9CA"/>
+                    <circle cx="77" cy="112" r="4.5" fill="#4A443F"/>
+                    <circle cx="103" cy="112" r="4.5" fill="#4A443F"/>
+                    <path d="M82 122 Q90 130 98 122" stroke="#4A443F" stroke-width="4" fill="none" stroke-linecap="round"/>
+                </svg>
+            `;
+            const iconDataUri = 'data:image/svg+xml;utf8,' + encodeURIComponent(iconSvg);
+            const touchIcon = document.getElementById('apple-touch-icon');
+            if (touchIcon) touchIcon.href = iconDataUri;
+
+            const manifestObj = {
+                name: 'みずの記録 | 每日喝水小手帳',
+                short_name: '喝水小手帳',
+                start_url: '.',
+                display: 'standalone',
+                background_color: '#FAF7F2',
+                theme_color: '#FAF7F2',
+                icons: [{
+                    src: iconDataUri,
+                    sizes: '180x180',
+                    type: 'image/svg+xml'
+                }]
+            };
+            const manifestEl = document.getElementById('app-manifest');
+            if (manifestEl) {
+                manifestEl.href = 'data:application/manifest+json;utf8,' + encodeURIComponent(JSON.stringify(manifestObj));
+            }
+        }
+
+        // 12. 掛載全域事件供 HTML onclick 呼叫
+        window.toggleCup = toggleCup;
+        window.resetTodayCups = resetTodayCups;
+        window.cyclePresetIllustration = cyclePresetIllustration;
+        window.handlePuzzleImageUpload = handlePuzzleImageUpload;
+        window.openRewardModal = openRewardModal;
+        window.closeRewardModal = closeRewardModal;
+        window.saveRewardForm = saveRewardForm;
+        window.toggleClaimReward = toggleClaimReward;
+        window.deleteReward = deleteReward;
+        window.openSyncModal = openSyncModal;
+        window.closeSyncModal = closeSyncModal;
+        window.copySyncCode = copySyncCode;
+        window.copyShareUrlWithSync = copyShareUrlWithSync;
+        window.applyNewSyncCode = applyNewSyncCode;
+        window.openInstallModal = openInstallModal;
+        window.closeInstallModal = closeInstallModal;
+
+        // 啟動應用與雲端同步
+        function bootstrapApp() {
+            const targetInput = document.getElementById('reward-target-input');
+            if (targetInput) {
+                targetInput.addEventListener('input', updateTargetHint);
+            }
+            setupMobileWebApp();
+            initCloudSync();
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', bootstrapApp);
+        } else {
+            bootstrapApp();
+        }
+    </script>
+</body>
+</html>
